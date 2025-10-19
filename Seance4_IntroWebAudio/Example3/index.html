@@ -1,0 +1,24 @@
+<body>
+    <head>
+            <link rel="stylesheet" href="css/styles.css">
+
+    </head>
+    <h1>Load a set of sounds with Promise.all and fetch</h1>
+    <p>The buttons below are created dynamically based on the loaded sounds.</p>
+
+    <!-- Menu déroulant des presets -->
+    <label for="presetSelect">Select a preset: </label>
+    <select id="presetSelect"></select>
+
+    <!-- Container pour boutons -->
+    <div id="buttonsContainer"></div>
+
+    <div id="canvasContainer" class="wrapper" style="width: 800px; height: 200px;">
+    <canvas id="myCanvas" width="800" height="200"></canvas>
+    <canvas id="myCanvasOverlay" width="800" height="200"></canvas>
+</div>
+    <!-- Bouton Play -->
+    <button id="playButton">Play</button>
+
+    <script src="js/main.js" type="module"></script>
+</body>
