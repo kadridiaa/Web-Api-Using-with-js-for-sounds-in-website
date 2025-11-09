@@ -1,4 +1,3 @@
-
 // ABOUT HOW TO DRAW AND ANIMATE IN AN HTML CANVAS
 // You can follow the MOOC "HTML Coding Essentials and Best Practices" 
 // at W3cx.org, by Michel Buffa, Modules 3 and 4 (drawing and animation)
@@ -11,7 +10,7 @@
 // by skipping samples. If not provided, it will be set to a tenth of sampleSize in getPeaks()
 // sampleSize is the number of samples used to compute a single peak
 // see getPeaks() method for more details
-export default class WaveformDrawer {
+export class WaveformDrawer {
     decodedAudioBuffer;
     peaks;
     canvas;
@@ -155,3 +154,5 @@ export default class WaveformDrawer {
         }
     }
 }
+
+

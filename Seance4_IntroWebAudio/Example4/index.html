@@ -1,24 +1,162 @@
+<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="utf-8">
-    <title>Load a sound sample using fetch, decode it and play it using Web Audio</title>
-    <link rel="stylesheet" href="css/styles.css">
-    <!-- type="module" is necessary if the main.js file is using import / export (aka ES/JS modules)
-     Try removing it and see what happens in the debug console! -->
-    <script src="js/main.js" type="module"></script>
-    <script src="wamhost.js"></script>
+  <meta charset="UTF-8">
+  <title>Sampler 4×4 + Waveform</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <style>
+    /* Buttons de sons */
+    .soundButton {
+      margin: 5px;
+      padding: 15px 25px;
+      font-size: 18px;
+      border-radius: 15px;
+      border: none;
+      background-color: #1f2937;
+      color: #fff;
+      cursor: pointer;
+      box-shadow: 0 6px #999;
+      transition: all 0.2s;
+    }
+
+    .soundButton:active {
+      box-shadow: 0 3px #666;
+      transform: translateY(4px);
+    }
+
+    .soundButton:hover {
+      background-color: #3b82f6;
+      color: #fff;
+    }
+  </style>
 </head>
-
 <body>
-    <h1>Load a set of sounds with Promise.all and fetch</H1>
-    <p>The buttons below are created dynamically based on the loaded sounds.</p>
-    <div id="buttonsContainer"></div>
-    
-    <h1>Here is a more complete sampler (as a Web WAM plugin)</h1>
-    <p>Note: WAM = Web Audio Module, the name of the plugin standard for audio processing in web applications.</p>
-    <p>WAMs = "VST for the Web!"</p>
-    <h2>Select a preset in the menu and click on the buttons...</h2>
-    <div id="wamsampler-container"></div>
-</body>
+  <h1>Sampler 4×4 — One-shots + Waveform</h1>
+  <p>Choisissez un preset, cliquez sur un pad, et ajustez le trim sur la forme d’onde.</p>
 
+  <label for="presetSelect">Select a preset:</label>
+  <select id="presetSelect">
+    <option value="" selected disabled>Select an option</option>
+  </select>
+
+  <div id="mainContainer" style="display:flex; gap:20px; justify-content:center; align-items:flex-start; margin-top:20px;">
+    <div id="buttonsContainer" class="grid"></div>
+
+    <div id="canvasContainer" class="wrapper" style="width:800px; height:300px;">
+      <canvas id="myCanvas" width="800" height="300"></canvas>
+      <canvas id="myCanvasOverlay" width="800" height="300"></canvas>
+    </div>
+  </div>
+
+  <div style="margin-top:20px; text-align:center;">
+    <button id="loadAllBtn" class="btn">Charger tout</button>
+    <button id="playButton" class="btn">Play</button>
+  </div>
+
+  <div id="globalStatus" class="status"></div>
+
+  <script type="module">
+    import SamplerEngine from './js/SamplerEngine.js';
+    import SamplerGUI from './js/SamplerGUI.js';
+    import { WaveformDrawer } from './js/waveformdrawer.js';
+    import { TrimbarsDrawer } from './js/trimbarsdrawer.js';
+    import { loadAndDecodeSound, playSound } from './js/soundutils.js';
+    import { pixelToSeconds } from './js/utils.js';
+
+    const baseURL = "http://localhost:3000"; 
+    let ctx, waveformDrawer, trimbarsDrawer, decodedSound;
+    const canvas = document.querySelector("#myCanvas");
+    const canvasOverlay = document.querySelector("#myCanvasOverlay");
+    const presetSelect = document.querySelector("#presetSelect");
+    const buttonsContainer = document.querySelector("#buttonsContainer");
+    const playButton = document.querySelector("#playButton");
+    const loadAllBtn = document.querySelector("#loadAllBtn");
+    const globalStatus = document.querySelector("#globalStatus");
+
+    playButton.disabled = true;
+
+    window.onload = async function init() {
+      ctx = new AudioContext();
+
+      waveformDrawer = new WaveformDrawer();
+      trimbarsDrawer = new TrimbarsDrawer(canvasOverlay, 100, 200);
+
+      // Récupérer presets depuis API
+      let presets = [];
+      try {
+        const response = await fetch(`${baseURL}/api/presets`);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        presets = await response.json();
+      } catch (err) {
+        console.error("Erreur fetch presets :", err);
+        return;
+      }
+
+      // Remplir le menu déroulant
+      presets.forEach((preset, index) => {
+        const option = document.createElement("option");
+        option.value = index;
+        option.textContent = preset.name;
+        presetSelect.appendChild(option);
+      });
+
+      // Créer le sampler engine
+      const sampler = new SamplerEngine([], {
+        onStatus: (i, {phase, message}) => console.log(`Pad ${i}: ${phase} - ${message}`),
+        onProgress: (i, recvd, total) => console.log(`Pad ${i}: ${recvd}/${total}`),
+        onPlay: (i) => console.log(`Playing pad ${i}`)
+      });
+
+      // GUI
+      const samplerGUI = new SamplerGUI(sampler, buttonsContainer);
+
+      // Fonction pour charger preset
+      const loadPreset = (presetIndex) => {
+        const preset = presets[presetIndex];
+        if (!preset) return;
+
+        const urls = preset.samples.map(s => `${baseURL}/presets/${s.url.replace(/^\.\//, '')}`);
+        const names = preset.samples.map(s => s.name);
+
+        sampler.updateSamples(urls, names);
+        samplerGUI.createButtons();
+      };
+
+      // Onchange du select
+      presetSelect.onchange = (e) => loadPreset(parseInt(e.target.value));
+
+      // Load all
+      loadAllBtn.onclick = async () => {
+        loadAllBtn.disabled = true;
+        globalStatus.textContent = "Chargement…";
+        await sampler.loadAllParallel();
+        globalStatus.textContent = "Tous prêts !";
+        setTimeout(() => globalStatus.textContent="", 1500);
+        loadAllBtn.disabled = false;
+      };
+
+      // Play selected sound
+      playButton.onclick = () => {
+        if (!decodedSound) return;
+        playSound(ctx, decodedSound, 0, decodedSound.duration);
+      };
+
+      // Gestion des trimbars
+      canvasOverlay.onmousemove = (evt) => {
+        const rect = canvas.getBoundingClientRect();
+        trimbarsDrawer.moveTrimBars({ x: evt.clientX - rect.left, y: evt.clientY - rect.top });
+      };
+      canvasOverlay.onmousedown = () => trimbarsDrawer.startDrag();
+      canvasOverlay.onmouseup = () => trimbarsDrawer.stopDrag();
+
+      requestAnimationFrame(animate);
+    };
+
+    function animate() {
+      trimbarsDrawer.clear();
+      trimbarsDrawer.draw();
+      requestAnimationFrame(animate);
+    }
+  </script>
+</body>
 </html>
